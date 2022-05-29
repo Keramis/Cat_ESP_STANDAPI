@@ -3,6 +3,8 @@
 
 ## Features:
 - ESP On All Players
+- ESP On a Single Player
+    - This ESP will take settings (colors, name, health, etc.) from the main script menu.
 - Customizable range for colors
     - Red
     - Orange
@@ -22,4 +24,3 @@
     - Shows players' health, in numbers, above their head.
 - Scale of Text (/100)
     - Scale of the text for text-based ESP, dividing the value by 100, giving the user greater control.
-    
