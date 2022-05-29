@@ -54,6 +54,7 @@ local colorProximities = {
 }
 
 local esp_settings = {
+    line_esp = true,
     txtscale = 0.5,
     disablecolorlines = false,
     intcheck = true,
@@ -61,6 +62,10 @@ local esp_settings = {
     name_sync = true,
     health = false
 }
+
+local function drawESPText(coord, Yoffset, text, scale, color)
+    directx.draw_text(coord.x, coord.y + Yoffset, text, ALIGN_CENTRE, scale, color.r, color.g, color.b, 200)
+end
 
 local function tableFin(colortbl, distance)
     for i = 1, #colortbl do if distance <= colortbl[i][2] then return {r = colortbl[i][3], g = colortbl[i][4], b = colortbl[i][5]} end end
@@ -72,40 +77,42 @@ menu.toggle_loop(menuroot, "ESP On All Players", {"catesp"}, "Enables color-prox
     for i = 1, #playerlist do
         local targetped = getPlayerPed(playerlist[i])
         local ppos = getEntityCoords(targetped)
-        if ((not (players.is_in_interior(playerlist[i]) or ppos.z < -10)) and esp_settings.intcheck) or (not esp_settings.intcheck)then
+        if ((not (players.is_in_interior(playerlist[i]) or ppos.z < -10)) and esp_settings.intcheck) or (not esp_settings.intcheck)then --checking for interior, underground
+
+            --coordinate stuff
             local mypos = getEntityCoords(getLocalPed())
             local playerHeadOffset = ENTITY.GET_OFFSET_FROM_ENTITY_IN_WORLD_COORDS(targetped, 0, 0, 1.0)
             local vdist = SYSTEM.VDIST2(mypos.x, mypos.y, mypos.z, ppos.x, ppos.y, ppos.z)
-            local col = tableFin(colorProximities, vdist)
-            if not esp_settings.disablecolorlines then
-                drawLine(mypos, ppos, col.r, col.g, col.b, 200)
-            else
-                drawLine(mypos, ppos, 255, 255, 255, 200)
-            end
-            if esp_settings.name then
-                local screenName = worldToScreen(playerHeadOffset)
-                if screenName.success then --dont want to draw names that are outside the screen, they will clump up at the top left.
-                    if esp_settings.name_sync then
-                        directx.draw_text(screenName.x, screenName.y - 0.02, GetPlayerName_pid(playerlist[i]), ALIGN_CENTRE, esp_settings.txtscale, col.r, col.g, col.b, 200)
-                    else
-                        directx.draw_text(screenName.x, screenName.y - 0.02, GetPlayerName_pid(playerlist[i]), ALIGN_CENTRE, esp_settings.txtscale, 255, 255, 255, 200)
-                    end
+
+            --color settings
+            local colLine
+            local colText
+            if not esp_settings.disablecolorlines then colLine = tableFin(colorProximities, vdist) else colLine = {r = 255, g = 255, b = 255} end --setting for if lines are colored
+            if esp_settings.name_sync then colText = tableFin(colorProximities, vdist) else colText = {r = 255, g = 255, b = 255} end --setting for if text should be colored
+
+            --line ESP
+            if esp_settings.line_esp then drawLine(mypos, ppos, colLine.r, colLine.g, colLine.b, 200) end
+
+            --head offset for all texts
+            local screenName = worldToScreen(playerHeadOffset)
+            --text ESP
+            if screenName.success then --check if it should be drawn, since we don't want to draw things that are out of the screen.
+                --name ESP
+                if esp_settings.name then
+                    drawESPText(screenName, -0.02, GetPlayerName_pid(playerlist[i]), esp_settings.txtscale, colText)
                 end
-            end
-            if esp_settings.health then
-                local screenName = worldToScreen(playerHeadOffset)
-                if screenName.success then --dont want to draw names that are outside the screen, they will clump up at the top left.
+
+                --health ESP
+                if esp_settings.health then
                     local health = ENTITY.GET_ENTITY_HEALTH(targetped)-100 local maxhealth = ENTITY.GET_ENTITY_MAX_HEALTH(targetped)-100
-                    if esp_settings.name_sync then
-                        directx.draw_text(screenName.x, screenName.y - 0.02*2, "(" .. health .. " / " .. maxhealth .. ")", ALIGN_CENTRE, esp_settings.txtscale, col.r, col.g, col.b, 200)
-                    else
-                        directx.draw_text(screenName.x, screenName.y - 0.02*2, "(" .. health .. " / " .. maxhealth .. ")", ALIGN_CENTRE, esp_settings.txtscale, 255, 255, 255, 200)
-                    end
+                    drawESPText(screenName, -0.02*2, "(" .. health .. " / " .. maxhealth .. ")", esp_settings.txtscale, colText)
                 end
             end
         end
     end
 end)
+
+--settings
 
 local proximities = menu.list(menuroot, "Color Settings, Proximities", {"catprox"}, "Settings for the proximity colors.")
 
@@ -117,6 +124,10 @@ end
 
 menu.toggle(proximities, "Underground/interior check", {"catinterior"}, "Doesn't ESP the player if they are in an interior or are underground.", function (toggle)
     esp_settings.intcheck = toggle
+end, true)
+
+menu.toggle(proximities, "Line ESP", {"catlineesp"}, "Enables Line ESP.", function (toggle)
+    esp_settings.line_esp = toggle
 end, true)
 
 menu.toggle(proximities, "Disable Colored Lines", {"catdisablecolorlines"}, "Disables the colored lines of the line ESP, making them all white. Has no effect on Name ESP color, though.", function (toggle)
