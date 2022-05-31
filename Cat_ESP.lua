@@ -56,11 +56,12 @@ local colorProximities = {
 local esp_settings = {
     line_esp = true,
     stand_lines = false,
+    box_esp = false,
     txtscale = 0.5,
     disablecolorlines = false,
     intcheck = true,
     name = false,
-    name_sync = true,
+    text_sync = true,
     health = false
 }
 
@@ -78,10 +79,38 @@ local function tableFin(colortbl, distance, standCompatible)
     end
 end
 
-local function espOnPlayer(pid, intcheck, disablecolorlines, namesync, lineesp, nameesp, healthesp, txtscale, standESP)
+local function nativeDrawLine(x1, y1, z1, x2, y2, z2, r, g, b, a)
+    GRAPHICS.DRAW_LINE(x1, y1, z1, x2, y2, z2, r, g, b, a)
+end
+
+local function boxESPOnPlayer(pid, horizontalOffset, color)
+    --[[mission: Box ESP
+        Get Head Coordinates, with vertical offset to account for center-of-head
+        Get Tallness of player (1.94m)
+        Using a horizontal offset, get the top corners.
+        Using the tallness, get the bottom corners.
+        Draw the lines!
+    ]]
+    local targetped = getPlayerPed(pid)
+    local topOfHead = PED.GET_PED_BONE_COORDS(targetped, 31086, 0, 0, 0); topOfHead.z = topOfHead.z + 0.30 --[[SKEL_Head || 31086]] --[[0.30 vertical offset for head]]
+    local bottomOfFeet = {z = topOfHead.z - 1.94}
+    local rightCorner = ENTITY.GET_OFFSET_FROM_ENTITY_IN_WORLD_COORDS(targetped, horizontalOffset, 0, 0); rightCorner.z = topOfHead.z
+    local leftCorner = ENTITY.GET_OFFSET_FROM_ENTITY_IN_WORLD_COORDS(targetped, -horizontalOffset, 0, 0); leftCorner.z = topOfHead.z
+    local bRightCorner = rightCorner; bRightCorner.z = topOfHead.z - 1.94
+    local bLeftCorner = leftCorner; bLeftCorner.z = topOfHead.z - 1.94
+
+    nativeDrawLine(rightCorner.x, rightCorner.y, topOfHead.z, leftCorner.x, leftCorner.y, topOfHead.z, color.r, color.g, color.g, color.a) --top line
+    nativeDrawLine(rightCorner.x, rightCorner.y, topOfHead.z, bRightCorner.x, bRightCorner.y, bottomOfFeet.z, color.r, color.g, color.g, color.a) --right line
+    nativeDrawLine(leftCorner.x, leftCorner.y, topOfHead.z, bLeftCorner.x, bLeftCorner.y, bottomOfFeet.z, color.r, color.g, color.g, color.a) --left line
+    nativeDrawLine(bRightCorner.x, bRightCorner.y, bottomOfFeet.z, bLeftCorner.x, bLeftCorner.y, bottomOfFeet.z, color.r, color.g, color.g, color.a) --bottom line
+
+    --local tt = worldToScreen(rightCorner); directx.draw_line(0.5, 1.0, tt.x, tt.y, whiteColor)
+end
+
+local function espOnPlayer(pid, intcheck, disablecolorlines, namesync, lineesp, boxesp, nameesp, healthesp, txtscale, standESP)
     local targetped = getPlayerPed(pid)
     local ppos = getEntityCoords(targetped)
-    if ((not (players.is_in_interior(pid) or ppos.z < -10)) and intcheck) or (not intcheck)then --checking for interior, underground
+    if (((not players.is_in_interior(pid)) or (ppos.z < -10)) and intcheck) or (not intcheck)then --checking for interior, underground
 
         --coordinate stuff
         local mypos = getEntityCoords(getLocalPed())
@@ -102,7 +131,7 @@ local function espOnPlayer(pid, intcheck, disablecolorlines, namesync, lineesp, 
         if lineesp then
             local cent = worldToScreen(centerPlayer)
             if cent.success and standESP then --if they're on the screen, we use the directX function, since it's faster and goes thru buildings.
-                if not CAM.GET_CAM_VIEW_MODE_FOR_CONTEXT(CAM._GET_CAM_ACTIVE_VIEW_MODE_CONTEXT()) == 4 then --check if in first person
+                if CAM.GET_CAM_VIEW_MODE_FOR_CONTEXT(CAM._GET_CAM_ACTIVE_VIEW_MODE_CONTEXT()) ~= 4 then --check if in first person
                     --thank you aaron!
                     local localcent = worldToScreen(mypos)
                     local colLineStand
@@ -116,6 +145,10 @@ local function espOnPlayer(pid, intcheck, disablecolorlines, namesync, lineesp, 
             else
                 drawLine(mypos, ppos, colLineNative.r, colLineNative.g, colLineNative.b, colLineNative.a) --else we use the native func (behnid us)
             end
+        end
+        --box ESP
+        if boxesp then
+            boxESPOnPlayer(pid, 0.5, colLineNative)
         end
         --text ESP
         if screenName.success then --check if it should be drawn, since we don't want to draw things that are out of the screen.
@@ -133,14 +166,11 @@ local function espOnPlayer(pid, intcheck, disablecolorlines, namesync, lineesp, 
     end
 end
 
-
-
-
 menu.toggle_loop(menuroot, "ESP On All Players", {"catesp"}, "Enables color-proximity ESP on all players.", function ()
     local playerlist = players.list(false, true, true)
     for i = 1, #playerlist do
         espOnPlayer(playerlist[i], esp_settings.intcheck, esp_settings.disablecolorlines,
-        esp_settings.name_sync, esp_settings.line_esp, esp_settings.name, esp_settings.health,
+        esp_settings.text_sync, esp_settings.line_esp, esp_settings.box_esp, esp_settings.name, esp_settings.health,
         esp_settings.txtscale, esp_settings.stand_lines)
     end
 end)
@@ -150,7 +180,9 @@ end)
 
 --settings
 
+
 local proximities = menu.list(menuroot, "Color Settings, Proximities", {"catprox"}, "Settings for the proximity colors.")
+menu.divider(proximities, "Color Proximities")
 
 for i = 1, #colorProximities do
     menu.slider(proximities, colorProximities[i][1] .. " range", {"catesp " .. colorProximities[i][1]}, "Range for " .. colorProximities[i][1] .. " esp.", 1, 100000, (i*200), 50, function (value)
@@ -158,35 +190,42 @@ for i = 1, #colorProximities do
     end)
 end
 
-menu.toggle(proximities, "Underground/interior check", {"catinterior"}, "Doesn't ESP the player if they are in an interior or are underground.", function (toggle)
+
+local espenables = menu.list(menuroot, "ESP Settings/Enabled", {"catenabled"}, "Settings for which ESP is enabled, settings.")
+
+menu.toggle(espenables, "Underground/interior check", {"catinterior"}, "Doesn't ESP the player if they are in an interior or are underground.", function (toggle)
     esp_settings.intcheck = toggle
 end, true)
 
-menu.toggle(proximities, "Line ESP", {"catlineesp"}, "Enables Line ESP.", function (toggle)
+menu.toggle(espenables, "Line ESP", {"catlineesp"}, "Enables Line ESP.", function (toggle)
     esp_settings.line_esp = toggle
 end, true)
 
-menu.toggle(proximities, "Stand Line ESP", {"catstandesp"}, "Line ESP will now use Stand's draw function for lines, which goes through buildings.", function (toggle)
+menu.toggle(espenables, "Stand Line ESP", {"catstandesp"}, "Line ESP will now use Stand's draw function for lines, which goes through buildings.", function (toggle)
     esp_settings.stand_lines = toggle
 end)
 
-menu.toggle(proximities, "Disable Colored Lines", {"catdisablecolorlines"}, "Disables the colored lines of the line ESP, making them all white. Has no effect on Name ESP color, though.", function (toggle)
+menu.toggle(espenables, "Box ESP", {"catboxesp"}, "Box ESP, with rotation.", function (toggle)
+    esp_settings.box_esp = toggle
+end)
+
+menu.toggle(espenables, "Disable Colored Lines", {"catdisablecolorlines"}, "Disables the colored lines of the line ESP, making them all white. Has no effect on Name ESP color, though.", function (toggle)
     esp_settings.disablecolorlines = toggle
 end)
 
-menu.toggle(proximities, "Name ESP", {"catname"}, "This will draw the player's name above them, if enabled.", function (toggle)
+menu.toggle(espenables, "Name ESP", {"catname"}, "This will draw the player's name above them, if enabled.", function (toggle)
     esp_settings.name = toggle
 end)
 
-menu.toggle(proximities, "Name ESP Syncs With Color", {"catespnamesync"}, "This will make the Name ESP have the same color as the line.", function (toggle)
-    esp_settings.name_sync = toggle
+menu.toggle(espenables, "Text ESP Syncs With Color", {"catespnamesync"}, "This will make the Name ESP have the same color as the line.", function (toggle)
+    esp_settings.text_sync = toggle
 end, true)
 
-menu.toggle(proximities, "Health ESP", {"cathealth"}, "This will draw the player's health above, if enabled.", function (toggle)
+menu.toggle(espenables, "Health ESP", {"cathealth"}, "This will draw the player's health above, if enabled.", function (toggle)
     esp_settings.health = toggle
 end)
 
-menu.slider(proximities, "Scale of Text (/100)", {"catscaletext"}, "Scale of the text, divided by 100. For health and name esp.", 1, 500, 50, 10, function (value)
+menu.slider(espenables, "Scale of Text (/100)", {"catscaletext"}, "Scale of the text, divided by 100. For health and name esp.", 1, 500, 50, 10, function (value)
     esp_settings.txtscale = value/100
 end)
 
@@ -199,52 +238,11 @@ playersList = {
 
 local function playerFunctions(pid)
     local playerRoot = menu.player_root(pid)
+    menu.divider(playerRoot, "Cat_ESP.lua")
     menu.toggle_loop(playerRoot, "ESP On Player", {"catesp"}, "Enables ESP on this specific player. Uses color settings found in main script menu.", function ()
-        local targetped = getPlayerPed(playerlist[i])
-        local ppos = getEntityCoords(targetped)
-        if ((not (players.is_in_interior(playerlist[i]) or ppos.z < -10)) and esp_settings.intcheck) or (not esp_settings.intcheck)then --checking for interior, underground
-
-            --coordinate stuff
-            local mypos = getEntityCoords(getLocalPed())
-            local playerHeadOffset = ENTITY.GET_OFFSET_FROM_ENTITY_IN_WORLD_COORDS(targetped, 0, 0, 1.0)
-            local centerPlayer = getEntityCoords(targetped)
-            local vdist = SYSTEM.VDIST2(mypos.x, mypos.y, mypos.z, ppos.x, ppos.y, ppos.z)
-
-            --color settings
-            local colLineNative
-            local colText
-            if not esp_settings.disablecolorlines then colLineNative = tableFin(colorProximities, vdist, false) else colLineNative = {r = 255, g = 255, b = 255, a = 255} end --setting for if lines are colored
-            if esp_settings.name_sync then colText = tableFin(colorProximities, vdist, true) else colText = {r = 1.0, g = 1.0, b = 1.0, a = 1.0} end --setting for if text should be colored
-
-            --head offset for all texts
-            local screenName = worldToScreen(playerHeadOffset)
-
-            --line ESP
-            if esp_settings.line_esp then
-                local cent = worldToScreen(centerPlayer)
-                if cent.success then --if they're on the screen, we use the directX function, since it's faster and goes thru buildings.
-                    local localcent = worldToScreen(mypos)
-                    local colLineStand
-                    if not esp_settings.disablecolorlines then colLineStand = tableFin(colorProximities, vdist, true) else colLineStand = {r = 1.0, g = 1.0, b = 1.0, a = 1.0} end
-                    directx.draw_line(localcent.x, localcent.y, cent.x, cent.y, colLineStand)
-                else
-                    drawLine(mypos, ppos, colLineNative.r, colLineNative.g, colLineNative.b, colLineNative.a) --else we use the native func (behnid us)
-                end
-            end
-            --text ESP
-            if screenName.success then --check if it should be drawn, since we don't want to draw things that are out of the screen.
-                --name ESP
-                if esp_settings.name then
-                    drawESPText(screenName, -0.02, GetPlayerName_pid(playerlist[i]), esp_settings.txtscale, colText)
-                end
-
-                --health ESP
-                if esp_settings.health then
-                    local health = ENTITY.GET_ENTITY_HEALTH(targetped)-100 local maxhealth = ENTITY.GET_ENTITY_MAX_HEALTH(targetped)-100
-                    drawESPText(screenName, -0.02*2, "(" .. health .. " / " .. maxhealth .. ")", esp_settings.txtscale, colText)
-                end
-            end
-        end
+        espOnPlayer(pid, false, esp_settings.disablecolorlines,
+        esp_settings.text_sync, esp_settings.line_esp, esp_settings.box_esp, esp_settings.name, esp_settings.health,
+        esp_settings.txtscale, esp_settings.stand_lines)
     end)
 end
 
