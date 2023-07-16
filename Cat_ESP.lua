@@ -1,4 +1,4 @@
---Made by yaboi ScriptCat#6566 // @Keramis
+--Made by yaboi kryptcat // @Keramis
 
 util.require_natives(1651208000)
 util.keep_running()
@@ -29,7 +29,7 @@ local function worldToScreen(coords)
     local sx = memory.alloc()
     local sy = memory.alloc()
     local success = GRAPHICS.GET_SCREEN_COORD_FROM_WORLD_COORD(coords.x, coords.y, coords.z, sx, sy)
-    local screenx = memory.read_float(sx) local screeny = memory.read_float(sy) memory.free(sx) memory.free(sy)
+    local screenx = memory.read_float(sx) local screeny = memory.read_float(sy) --memory.free(sx) memory.free(sy)
     return {x = screenx, y = screeny, success = success}
 end
 
